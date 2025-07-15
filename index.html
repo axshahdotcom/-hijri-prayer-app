@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تطبيق الصلاة</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-image: url('https://i.imgur.com/hA9dBDn.jpg');
+      background-size: cover;
+      background-position: center;
+      margin: 0;
+      padding: 0;
+      color: white;
+      text-align: center;
+    }
+    .container {
+      padding: 20px;
+    }
+    .tile {
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 15px;
+      padding: 15px;
+      margin: 10px auto;
+      width: 90%;
+      max-width: 600px;
+    }
+    select, button {
+      font-size: 16px;
+      padding: 10px;
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>أوقات الصلاة</h1>
+
+    <div class="tile">
+      <label>اختر الإمارة:</label>
+      <select id="emirateSelect"></select>
+
+      <label>اختر المدينة:</label>
+      <select id="citySelect"></select>
+    </div>
+
+    <div id="prayerTiles" class="tile"></div>
+
+    <div id="nextPrayerCountdown" class="tile"></div>
+    <div id="iqamaCountdown" class="tile"></div>
+  </div>
+
+  <script>
+    let selectedCityId = null;
+    let calendarId = null;
+
+    async function fetchJSON(url) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.error('Fetch failed:', err);
+        alert('تعذر تحميل البيانات من الخادم. يرجى التحقق من الاتصال أو المحاولة لاحقًا.');
+        return { data: [] };
+      }
+    }
+
+    async function loadCountries() {
+      const data = await fetchJSON('/api/country_list');
+      const emirateSelect = document.getElementById('emirateSelect');
+      data.data.forEach(country => {
+        const option = document.createElement('option');
+        option.value = country.country_id;
+        option.textContent = country.country_title_ar;
+        emirateSelect.appendChild(option);
+      });
+
+      emirateSelect.addEventListener('change', () => loadCities(emirateSelect.value));
+    }
+
+    async function loadCities(countryId) {
+      const citySelect = document.getElementById('citySelect');
+      citySelect.innerHTML = '';
+      const data = await fetchJSON(`/api/city_list?country_id=${countryId}`);
+      data.data.forEach(city => {
+        const option = document.createElement('option');
+        option.value = city.city_id;
+        option.textContent = city.city_title_ar;
+        citySelect.appendChild(option);
+      });
+
+      citySelect.addEventListener('change', () => {
+        selectedCityId = citySelect.value;
+        loadPrayerTimes();
+      });
+    }
+
+    async function loadPrayerTimes() {
+      const date = new Date().toISOString().split('T')[0];
+      const response = await fetchJSON(`/api/today_detail?date=${date}`);
+      const today = response.data.find(item => item.date === date);
+      if (!today) return;
+      calendarId = today.calendar_id;
+
+      const prayers = today.prayer_time.filter(p => p.city_id == selectedCityId);
+      displayPrayerTimes(prayers);
+
+      const now = new Date();
+      const timeParam = encodeURIComponent(now.toTimeString().split(' ')[0]);
+      await fetchJSON(`/api/day_detail?calendar_id=${calendarId}&current_time=${timeParam}&city_id=${selectedCityId}`);
+      countdownNextPrayer(prayers);
+    }
+
+    function displayPrayerTimes(prayers) {
+      const container = document.getElementById('prayerTiles');
+      container.innerHTML = '';
+      prayers.forEach(p => {
+        const am = ["الفجر", "الشروق"].includes(p.prayer_title_ar);
+        const displayTime = am ? p.prayer_time + ' ص' : p.prayer_time + ' م';
+        const iqamaTime = new Date(`1970-01-01T${p.prayer_time}`);
+        iqamaTime.setMinutes(iqamaTime.getMinutes() + p.iqama_time);
+        const iqamaStr = iqamaTime.toTimeString().split(':').slice(0, 2).join(':');
+        const tile = `
+          <div style="margin-bottom:10px">
+            <strong>${p.prayer_title_ar}</strong><br>
+            وقت الصلاة: ${displayTime}<br>
+            الإقامة: ${iqamaStr}
+          </div>
+        `;
+        container.innerHTML += tile;
+      });
+    }
+
+    function countdownNextPrayer(prayers) {
+      const now = new Date();
+      const upcoming = prayers.find(p => {
+        const [h, m] = p.prayer_time.split(':');
+        const time = new Date();
+        time.setHours(h, m, 0, 0);
+        return time > now;
+      });
+
+      if (!upcoming) return;
+
+      const prayerTime = new Date();
+      const [h, m] = upcoming.prayer_time.split(':');
+      prayerTime.setHours(h, m, 0, 0);
+
+      const iqamaTime = new Date(prayerTime.getTime());
+      iqamaTime.setMinutes(iqamaTime.getMinutes() + upcoming.iqama_time);
+
+      updateCountdowns(prayerTime, iqamaTime, upcoming.prayer_title_ar);
+    }
+
+    function updateCountdowns(prayerTime, iqamaTime, label) {
+      const prayerDiv = document.getElementById('nextPrayerCountdown');
+      const iqamaDiv = document.getElementById('iqamaCountdown');
+      function update() {
+        const now = new Date();
+        const diffPrayer = Math.max(0, prayerTime - now);
+        const diffIqama = Math.max(0, iqamaTime - now);
+
+        prayerDiv.textContent = `الصلاة القادمة (${label}) خلال: ${formatDuration(diffPrayer)}`;
+        if (diffPrayer <= 0) {
+          iqamaDiv.textContent = `الإقامة بعد: ${formatDuration(diffIqama)}`;
+        } else {
+          iqamaDiv.textContent = '';
+        }
+      }
+      update();
+      setInterval(update, 1000);
+    }
+
+    function formatDuration(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    loadCountries();
+  </script>
+</body>
+</html>
