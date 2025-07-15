@@ -52,6 +52,8 @@
   </div>
 
   <script>
+    const API_BASE = 'https://hijri-api.onrender.com/api'; // ← Replace with your deployed Node.js URL
+
     let selectedCityId = null;
     let calendarId = null;
 
@@ -68,7 +70,7 @@
     }
 
     async function loadCountries() {
-      const data = await fetchJSON('/api/country_list');
+      const data = await fetchJSON(`${API_BASE}/country_list`);
       const emirateSelect = document.getElementById('emirateSelect');
       data.data.forEach(country => {
         const option = document.createElement('option');
@@ -83,7 +85,7 @@
     async function loadCities(countryId) {
       const citySelect = document.getElementById('citySelect');
       citySelect.innerHTML = '';
-      const data = await fetchJSON(`/api/city_list?country_id=${countryId}`);
+      const data = await fetchJSON(`${API_BASE}/city_list?country_id=${countryId}`);
       data.data.forEach(city => {
         const option = document.createElement('option');
         option.value = city.city_id;
@@ -99,7 +101,7 @@
 
     async function loadPrayerTimes() {
       const date = new Date().toISOString().split('T')[0];
-      const response = await fetchJSON(`/api/today_detail?date=${date}`);
+      const response = await fetchJSON(`${API_BASE}/today_detail?date=${date}`);
       const today = response.data.find(item => item.date === date);
       if (!today) return;
       calendarId = today.calendar_id;
@@ -109,7 +111,7 @@
 
       const now = new Date();
       const timeParam = encodeURIComponent(now.toTimeString().split(' ')[0]);
-      await fetchJSON(`/api/day_detail?calendar_id=${calendarId}&current_time=${timeParam}&city_id=${selectedCityId}`);
+      await fetchJSON(`${API_BASE}/day_detail?calendar_id=${calendarId}&current_time=${timeParam}&city_id=${selectedCityId}`);
       countdownNextPrayer(prayers);
     }
 
