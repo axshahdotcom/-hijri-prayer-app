@@ -1,1 +1,1 @@
-# -hijri-prayer-app
+# hijri-prayer-app
