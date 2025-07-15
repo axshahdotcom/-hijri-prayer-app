@@ -1,5 +1,5 @@
 {
-  "name": "hijri-api",
+  "name": "hijri-proxy",
   "version": "1.0.0",
   "main": "hijri-proxy-server.js",
   "scripts": {
